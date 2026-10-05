@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>像素地铁跑酷 · Pixel Subway</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='6' width='20' height='14' fill='%23ffd23f'/%3E%3Crect x='6' y='20' width='20' height='6' fill='%233a86ff'/%3E%3C/svg%3E">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#1a1030;
+    font-family:"Consolas","SF Mono","PingFang SC","Microsoft YaHei",monospace; color:#fff; }
+  #game-wrap { position:fixed; inset:0; overflow:hidden; user-select:none; touch-action:none; }
+  canvas#game { position:absolute; inset:0; display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
+
+  /* HUD */
+  #hud { position:absolute; top:0; left:0; right:0; z-index:7;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 0; display:flex; justify-content:space-between; align-items:flex-start; }
+  .hud-box { background:rgba(20,14,46,.7); border:2px solid #6d5bd0; border-radius:8px;
+    padding:8px 13px; line-height:1.4; box-shadow:0 3px 0 rgba(0,0,0,.35); }
+  #dist { font-size:18px; font-weight:bold; color:#ffe066; letter-spacing:1px; }
+  #coins { font-size:14px; color:#ffd23f; font-weight:bold; }
+  #btn-pause { width:46px; height:46px; border-radius:9px; background:rgba(20,14,46,.7);
+    border:2px solid #6d5bd0; display:flex; align-items:center; justify-content:center; touch-action:none; }
+  #btn-pause:active { background:rgba(90,70,180,.8); }
+  #btn-pause svg { width:20px; height:20px; fill:#e6ddff; }
+
+  /* 覆盖面板 */
+  #overlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center;
+    background:rgba(16,9,38,.82); padding:20px; }
+  #overlay.hidden { display:none; }
+  .panel { width:100%; max-width:430px; max-height:90vh; overflow-y:auto; text-align:center;
+    background:#241651; border:3px solid #6d5bd0; border-radius:14px; padding:28px 24px;
+    box-shadow:0 6px 0 rgba(0,0,0,.4), inset 0 0 0 2px rgba(255,255,255,.06); }
+  .panel h1 { font-size:30px; font-weight:900; letter-spacing:2px; color:#ffe066;
+    text-shadow:3px 3px 0 #e63946, 5px 5px 0 rgba(0,0,0,.4); margin-bottom:6px; }
+  .panel .sub { font-size:12px; color:#b9a8ff; letter-spacing:3px; margin-bottom:20px; }
+  .panel p.help { font-size:13px; line-height:2; text-align:left; background:rgba(0,0,0,.28);
+    border-radius:10px; padding:14px 16px; margin-bottom:20px; color:#efe9ff; }
+  .panel p.help b { color:#5fd0ff; }
+  .panel p.help .y { color:#ffd23f; }
+  .big-btn { width:100%; padding:15px; border:none; border-radius:10px; font-size:17px; font-weight:900;
+    letter-spacing:3px; color:#1a1030; cursor:pointer; background:#5fd068;
+    box-shadow:0 5px 0 #2f9e44; transition:transform .08s; }
+  .big-btn:active { transform:translateY(4px); box-shadow:0 1px 0 #2f9e44; }
+  .big-btn.alt { margin-top:12px; background:#ffd23f; box-shadow:0 5px 0 #d39e00; color:#1a1030; }
+  #end-stats { font-size:16px; line-height:1.9; margin:8px 0 20px; color:#fff; }
+  #end-stats .big { font-size:26px; color:#ffe066; font-weight:bold; }
+  #new-record { color:#5fd068; font-weight:bold; margin-bottom:12px; letter-spacing:2px; display:none; }
+  #pause-btns { display:flex; gap:10px; }
+  #pause-btns .big-btn { margin:0; }
+  #pause-btns .alt { margin:0; background:#ff8fab; box-shadow:0 5px 0 #d6336c; color:#3a0a1e; }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="hud-box">
+      <div id="dist">0 m</div>
+      <div id="coins">● 0</div>
+    </div>
+    <button id="btn-pause" aria-label="暂停">
+      <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+    </button>
+  </div>
+
+  <div id="overlay">
+    <!-- 开始 -->
+    <div class="panel" id="panel-start">
+      <h1>像素地铁跑酷</h1>
+      <div class="sub">PIXEL SUBWAY RUN</div>
+      <p class="help">
+        <b>电脑：</b>← → / A D 换道，↑ / W / 空格 跳跃，↓ / S 下滑，P 暂停。<br>
+        <b>手机：</b>左右滑动换道，上滑跳跃，下滑翻滚；点屏也可跳跃。<br>
+        <span class="y">●</span> 吃金币加分；跳过矮障、下滑穿过高杆；<br>
+        <b style="color:#ff8fab">列车无法跳跃，必须提前换道！</b>
+      </p>
+      <button class="big-btn" id="btn-start">开始奔跑</button>
+    </div>
+
+    <!-- 暂停 -->
+    <div class="panel" id="panel-pause" style="display:none">
+      <h1 style="font-size:26px">已暂停</h1>
+      <div class="sub">PAUSED</div>
+      <div id="pause-btns">
+        <button class="big-btn" id="btn-resume">继续</button>
+        <button class="big-btn alt" id="btn-restart-p">重开</button>
+      </div>
+    </div>
+
+    <!-- 结束 -->
+    <div class="panel" id="panel-over" style="display:none">
+      <h1 style="font-size:26px;color:#ff8fab;text-shadow:3px 3px 0 rgba(0,0,0,.4)">撞车啦！</h1>
+      <div id="new-record">★ 新纪录 ★</div>
+      <div id="end-stats">
+        奔跑距离 <span class="big" id="end-dist">0</span> m<br>
+        收集金币 <span id="end-coins">0</span> 枚<br>
+        最远距离 <span id="end-high">0</span> m
+      </div>
+      <button class="big-btn" id="btn-retry">再来一次</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   像素地铁跑酷 Pixel Subway —— 单文件 Canvas 三车道跑酷
+   技术要点：
+   1) 伪 3D 透视：道路向地平线汇聚，物体随“距离 d”由远(大d)向近(d=0)
+      移动并放大；p = 1-d/VIEW 为投影进度(0远→1近)。
+   2) 像素风：canvas 以低分辨率缓冲渲染 + imageSmoothing 关闭，HUD 用 DOM。
+   3) 三车道动作：换道 / 跳跃(越矮障) / 下滑(穿高杆)；列车必须换道。
+   4) 主循环 rAF + dt 上限；关卡切换/重开真重置；切后台自动暂停。
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  var canvas = document.getElementById('game');
+  var ctx = canvas.getContext('2d');
+  var PIX = 3;                 // 像素颗粒（设备像素），越大越“马赛克”
+  var w = 0, h = 0;            // canvas 内部（像素化后）宽高
+
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function rand(a,b){ return a+Math.random()*(b-a); }
+  function randInt(a,b){ return a+Math.floor(Math.random()*(b-a+1)); }
+
+  /* ================= 透视投影 ================= */
+  var cx=0, yHor=0, yPlay=0, laneNear=0, laneFar=0;
+  function proj(laneX,p){
+    var y = yHor+(yPlay-yHor)*p;
+    var lw = laneFar+(laneNear-laneFar)*p;       // 当前 p 的车道横向间距
+    return { x:cx+laneX*lw, y:y, lw:lw };
+  }
+
+  /* ================= 游戏状态 ================= */
+  var VIEW = 72;               // 视野距离（米）
+  var G = {
+    state:'start',
+    totalDist:0, coins:0,
+    high:loadNum('pixel_subway_high',0),
+    speed:11,
+    player:null,
+    objs:[],
+    spawnCursor:18, decoCursor:8,
+    clouds:[],
+    pausePending:false
+  };
+  function loadNum(key,def){
+    try{ var v=parseInt(localStorage.getItem(key),10); return isNaN(v)?def:v; }catch(e){ return def; }
+  }
+  function saveNum(key,v){ try{ localStorage.setItem(key,String(v)); }catch(e){} }
+
+  /* ================= 玩家 ================= */
+  function makePlayer(){
+    return {
+      lane:1, dispLane:1,      // 整数车道 / 显示用浮点（平滑换道）
+      jumpY:0, vy:0,           // 跳跃高度(内部像素)与垂直速度
+      sliding:0,               // 下滑剩余时间
+      runT:0
+    };
+  }
+  function moveLane(dir){
+    var p=G.player;
+    p.lane = clamp(p.lane+dir,0,2);
+  }
+  function doJump(){
+    var p=G.player;
+    if(p.sliding>0){ p.sliding=0; }              // 下滑中不跳
+    if(p.jumpY===0 && p.vy===0){
+      p.vy = h*0.62;                             // 起跳初速度（内部像素/秒）
+    }
+  }
+  function doSlide(){
+    var p=G.player;
+    if(p.jumpY>0 || p.vy>0){ p.jumpY=0; p.vy=0; } // 空中下滑→立即落地
+    p.sliding = 0.58;
+  }
+  function updatePlayer(dt){
+    var p=G.player;
+    // 平滑换道
+    var dL = p.lane-p.dispLane;
+    var step = 7.5*dt;
+    if(Math.abs(dL)<=step) p.dispLane=p.lane; else p.dispLane += (dL>0?step:-step);
+    // 跳跃重力
+    if(p.vy>0 || p.jumpY>0){
+      p.jumpY += p.vy*dt;
+      p.vy -= h*1.55*dt;
+      if(p.jumpY<=0){ p.jumpY=0; p.vy=0; }
+    }
+    if(p.sliding>0) p.sliding-=dt;
+    p.runT += dt*(0.9+G.speed*0.06);             // 跑步动画频率随速度
+  }
+
+  /* ================= 物体生成 =================
+     type: train(列车,长) / low(矮障,可跳) / high(高杆,可滑) /
+           coin(金币) / deco(两侧装饰,无碰撞)
+     每个波次保证至少一条车道可通行。 */
+  function addObj(o){ G.objs.push(o); }
+
+  function spawnWave(d){
+    var r=Math.random(), trainLanes=[], l;
+    if(r<0.42){ trainLanes=[randInt(0,2)]; }
+    else if(r<0.6){
+      var safe=randInt(0,2);
+      for(l=0;l<3;l++) if(l!==safe) trainLanes.push(l);
+    }
+    for(var t=0;t<trainLanes.length;t++)
+      addObj({type:'train',lane:trainLanes[t],d:d,len:17});
+    for(l=0;l<3;l++){
+      if(trainLanes.indexOf(l)>=0) continue;
+      var rr=Math.random();
+      if(rr<0.42){ for(var k=0;k<4;k++) addObj({type:'coin',lane:l,d:d+k*2.4}); }
+      else if(rr<0.60){ addObj({type:'low',lane:l,d:d}); }
+      else if(rr<0.76){ addObj({type:'high',lane:l,d:d}); }
+    }
+  }
+  function spawnDeco(d){
+    var side = Math.random()<0.5?-1.55:1.55;
+    var kinds=['lamp','tree','bld'];
+    addObj({type:'deco',kind:kinds[randInt(0,2)],lane:side,d:d});
+  }
+
+  /* ================= 物体更新与碰撞 ================= */
+  // 车道索引→世界车道X（lane0=-1,1=0,2=1）
+  function laneToX(i){ return i-1; }
+  function updateObjs(dt){
+    // 生成
+    G.spawnCursor-=G.speed*dt;
+    if(G.spawnCursor<=0){ spawnWave(VIEW); G.spawnCursor=14; }
+    G.decoCursor-=G.speed*dt;
+    if(G.decoCursor<=0){ spawnDeco(VIEW); G.decoCursor=5.5; }
+
+    var p=G.player;
+    for(var i=G.objs.length-1;i>=0;i--){
+      var o=G.objs[i], prev=o.d;
+      o.d-=G.speed*dt;
+
+      if(o.type==='deco'){ if(o.d<-5) G.objs.splice(i,1); continue; }
+
+      // 列车：范围 [o.d, o.d+o.len]
+      if(o.type==='train'){
+        if(prev>0 && o.d<=0){
+          if(o.d+o.len>=0 && Math.abs(laneToX(o.lane)-p.dispLane)<0.5) crash();
+        }
+        if(o.d+o.len<-4) G.objs.splice(i,1);
+        continue;
+      }
+      // 单点物体：穿过玩家位置(d=0)时判定一次
+      if(prev>0 && o.d<=0){
+        var same = Math.abs(laneToX(o.lane)-p.dispLane)<0.5;
+        if(o.type==='coin'){
+          if(same){ G.coins++; G.totalDist+=4; }
+        } else if(o.type==='low'){
+          if(same && p.jumpY < h*0.06) crash();
+        } else if(o.type==='high'){
+          if(same && p.sliding<=0) crash();
+        }
+      }
+      if(o.d<-6) G.objs.splice(i,1);
+    }
+  }
+
+  function crash(){
+    if(G.state!=='playing') return;
+    explode(proj(G.player.dispLane,1).x, yPlay-h*0.08);
+    gameOver();
+  }
+
+  /* ================= 碰撞粒子（简单像素碎片） ================= */
+  var parts=[];
+  function explode(x,y){
+    for(var i=0;i<26;i++)
+      parts.push({x:x,y:y,vx:rand(-90,90),vy:rand(-160,-20),t:rand(.3,.8),c:['#ffd23f','#ff5d8f','#5fd0ff','#fff'][randInt(0,3)]});
+  }
+  function updateParts(dt){
+    for(var i=parts.length-1;i>=0;i--){
+      var p=parts[i]; p.t-=dt;
+      if(p.t<=0){ parts.splice(i,1);continue; }
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=320*dt;
+    }
+  }
+  function drawParts(){
+    for(var i=0;i<parts.length;i++){
+      var p=parts[i]; ctx.fillStyle=p.c;
+      var s=Math.max(1,Math.round(w*0.006));
+      ctx.fillRect(p.x,p.y,s,s);
+    }
+  }
+
+  /* ================= 云 ================= */
+  function initClouds(){
+    G.clouds=[];
+    for(var i=0;i<5;i++) G.clouds.push({x:rand(0,w),y:rand(0,h*0.2),s:rand(3,7)});
+  }
+
+  /* ================= 绘制：场景 ================= */
+  function drawSky(){
+    // 水平色带（硬边像素）
+    var bands=['#3b1d6e','#5a2d8f','#8a3eb0','#c756a8'];
+    var bh=yHor/bands.length;
+    for(var i=0;i<bands.length;i++){ ctx.fillStyle=bands[i]; ctx.fillRect(0,i*bh,w,bh+1); }
+    // 云
+    ctx.fillStyle='rgba(255,255,255,.85)';
+    for(var c=0;c<G.clouds.length;c++){
+      var cl=G.clouds[c];
+      ctx.fillRect(cl.x,cl.y,cl.s*2,cl.s);
+      ctx.fillRect(cl.x+cl.s*.4,cl.y-cl.s*.5,cl.s*1.4,cl.s*.6);
+    }
+    // 远景建筑剪影（轻微视差）
+    ctx.fillStyle='#1c1140';
+    var off=(G.totalDist*1.2)%(w*0.4);
+    for(var x=-w*0.4;x<w;x+=w*0.18){
+      var bx=x-off, bw=w*0.11, bh2=h*0.10+((Math.sin(x*3)+1)*h*0.05);
+      ctx.fillRect(bx,yHor-bh2,bw,bh2);
+    }
+  }
+  function drawGround(){
+    // 两侧场地
+    ctx.fillStyle='#2e7d4f'; ctx.fillRect(0,yHor,w,h-yHor);
+    // 道路梯形（laneX ±1.18）
+    function poly(lx){
+      ctx.beginPath();
+      var a=proj(-lx,0),b=proj(lx,0),c=proj(lx,1),d=proj(-lx,1);
+      ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c.x,c.y);ctx.lineTo(d.x,d.y);ctx.closePath();
+    }
+    poly(1.2); ctx.fillStyle='#4a4463'; ctx.fill();
+    // 道路边缘亮线
+    ctx.strokeStyle='#c9c4e8'; ctx.lineWidth=Math.max(1,w*0.004);
+    for(var s=-1;s<=1;s+=2){
+      ctx.beginPath(); var a=proj(s*1.2,0),b=proj(s*1.2,1);
+      ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+    // 枕木（随距离滚动）
+    ctx.strokeStyle='rgba(0,0,0,.35)';
+    var gap=4.2, startD=G.totalDist%gap;
+    for(var d=startD;d<VIEW;d+=gap){
+      var pp=1-d/VIEW; if(pp<0||pp>1) continue;
+      var L=proj(-1.05,pp),R=proj(1.05,pp);
+      ctx.lineWidth=Math.max(1,pp*w*0.006);
+      ctx.beginPath();ctx.moveTo(L.x,L.y);ctx.lineTo(R.x,R.y);ctx.stroke();
+    }
+    // 车道分隔线
+    ctx.strokeStyle='rgba(255,255,255,.28)';
+    for(var lx=-0.33;lx<=0.34;lx+=0.66){
+      ctx.beginPath();var a=proj(lx,0),b=proj(lx,1);
+      ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+  }
+
+  /* ================= 绘制：物体 ================= */
+  function drawObjs(){
+    // 远→近排序（d 大者先画，近处物体遮挡远处）
+    var sorted=G.objs.slice().sort(function(a,b){ return b.d-a.d; });
+    for(var i=0;i<sorted.length;i++){
+      var o=sorted[i];
+      var d=clamp(o.d,0,VIEW), p=1-d/VIEW;
+      if(o.type==='train') drawTrain(o);
+      else if(o.type==='deco') drawDeco(o,p);
+      else {
+        var pr=proj(laneToX(o.lane),p);
+        var u=w*0.014*(0.2+0.8*p);
+        if(o.type==='coin') drawCoin(pr.x,pr.y,u,p);
+        else if(o.type==='low') drawLow(pr.x,pr.y,u);
+        else if(o.type==='high') drawHigh(pr.x,pr.y,u,p);
+      }
+    }
+  }
+  function drawCoin(x,y,u,p){
+    var wpx=Math.max(2,u*2*(0.6+0.4*Math.abs(Math.sin(G.totalDist*0.2+x))));
+    ctx.fillStyle='#ffd23f';
+    ctx.fillRect(x-wpx/2,y-u,wpx,u*2);
+    ctx.fillStyle='#d39e00';
+    ctx.fillRect(x-wpx/4,y-u/2,Math.max(1,wpx/2),u);
+  }
+  function drawLow(x,y,u){
+    // 矮路障（橙白条纹）
+    ctx.fillStyle='#e8590c'; ctx.fillRect(x-u*2,y-u*2,u*4,u*2);
+    ctx.fillStyle='#fff';
+    ctx.fillRect(x-u*2,y-u*2,u*1.2,u*2); ctx.fillRect(x+u*.2,y-u*2,u*1.2,u*2);
+  }
+  function drawHigh(x,y,u,p){
+    // 悬挂高杆：上方横杠 + 侧柱，下方留空（下滑可过）
+    var top=y-u*5;
+    ctx.fillStyle='#ffd23f';
+    ctx.fillRect(x-u*2,top,u*4,u*.9);
+    ctx.fillStyle='#8d85c9';
+    ctx.fillRect(x-u*2,top,u*.7,u*5); ctx.fillRect(x+u*1.3,top,u*.7,u*5);
+  }
+  function drawTrain(o){
+    var d0=clamp(o.d,0,VIEW), d1=clamp(o.d+o.len,0,VIEW);
+    if(d1<=d0) return;
+    var lx=laneToX(o.lane), seg=8, pts=[];
+    for(var s=0;s<=seg;s++){
+      var dd=d1-(d1-d0)*s/seg;
+      var sc=.18+.82*(1-dd/VIEW);          // 近处大、远处小
+      pts.push({ pr:proj(lx,1-dd/VIEW), sc:sc });
+    }
+    function half(item){ return item.pr.lw*.42; }
+    // 车身多边形
+    ctx.beginPath();
+    ctx.moveTo(pts[0].pr.x-half(pts[0]),pts[0].pr.y);
+    for(s=1;s<=seg;s++) ctx.lineTo(pts[s].pr.x-half(pts[s]),pts[s].pr.y);
+    for(s=seg;s>=0;s--) ctx.lineTo(pts[s].pr.x+half(pts[s]),pts[s].pr.y);
+    ctx.closePath(); ctx.fillStyle='#c92b5b'; ctx.fill();
+    // 车窗（随透视大小）
+    for(s=0;s<=seg;s++){
+      var item=pts[s], hf=half(item)*.55, wh=Math.max(2,h*.05*item.sc);
+      ctx.fillStyle='#9fe7ff';
+      ctx.fillRect(item.pr.x-hf,item.pr.y-h*.17*item.sc-wh,hf*2,wh);
+    }
+    // 车头（近端）
+    var n0=pts[0];
+    ctx.fillStyle='#e84a7a';
+    ctx.fillRect(n0.pr.x-half(n0),n0.pr.y-Math.max(2,h*.04),half(n0)*2,Math.max(2,h*.04));
+  }
+  function drawDeco(o,p){
+    var pr=proj(o.lane,p), sc=0.2+0.8*p, u=w*0.02*sc;
+    if(o.kind==='tree'){
+      ctx.fillStyle='#6b4a2b'; ctx.fillRect(pr.x-u*.2,pr.y-u*2,u*.4,u*2);
+      ctx.fillStyle='#2f9e44'; ctx.fillRect(pr.x-u,pr.y-u*3.4,u*2,u*1.6);
+    } else if(o.kind==='lamp'){
+      ctx.fillStyle='#3a355c'; ctx.fillRect(pr.x-u*.15,pr.y-u*3,u*.3,u*3);
+      ctx.fillStyle='#ffe066'; ctx.fillRect(pr.x-u*.5,pr.y-u*3.2,u,u*.6);
+    } else {
+      ctx.fillStyle='#241651'; ctx.fillRect(pr.x-u,pr.y-u*3,u*2,u*3);
+      ctx.fillStyle='#3a2a72';
+      for(var yy=0;yy<3;yy++) ctx.fillRect(pr.x-u*.7,pr.y-u*2.6+yy*u*.9,u*1.4,Math.max(1,u*.3));
+    }
+  }
+
+  /* ================= 绘制：像素小人 ================= */
+  function drawPlayer(){
+    var p=G.player;
+    var pr=proj(p.dispLane,1);
+    var x=pr.x, y=yPlay-p.jumpY;
+    var u=w*0.017;                 // 像素块单位
+    // 下滑姿势（横躺）
+    if(p.sliding>0){
+      ctx.fillStyle='#3a86ff'; ctx.fillRect(x-u*4,y-u*2,u*8,u*2);          // 身体横
+      ctx.fillStyle='#ffcf9e'; ctx.fillRect(x+u*3,y-u*3,u*2,u*2);          // 头在前
+      ctx.fillStyle='#e63946'; ctx.fillRect(x+u*3,y-u*3.4,u*2,u*.7);       // 帽
+      ctx.fillStyle='#2b3a9e'; ctx.fillRect(x-u*4,y,u*3,u);                // 腿后
+      return;
+    }
+    var ph=p.runT, swing=Math.sin(ph*9)>0?1:-1;
+    // 腿
+    ctx.fillStyle='#2b3a9e';
+    if(p.jumpY>0){ // 跳跃收腿
+      ctx.fillRect(x-u*1.4,y-u*2,u*1.2,u*2); ctx.fillRect(x+u*.2,y-u*2,u*1.2,u*2);
+    } else {
+      ctx.fillRect(x-u*1.4,y-u*2-(swing>0?u*.6:0),u*1.2,u*2);
+      ctx.fillRect(x+u*.2,y-u*2-(swing<0?u*.6:0),u*1.2,u*2);
+    }
+    // 鞋
+    ctx.fillStyle='#d39e00';
+    ctx.fillRect(x-u*1.5,y-u*.4,u*1.4,u*.5); ctx.fillRect(x+u*.1,y-u*.4,u*1.4,u*.5);
+    // 上衣
+    ctx.fillStyle='#3a86ff'; ctx.fillRect(x-u*1.6,y-u*5,u*3.2,u*3);
+    // 手臂
+    ctx.fillStyle='#ffcf9e';
+    ctx.fillRect(x-u*2.2,y-u*4.6+(swing>0?u:0),u*.8,u*2);
+    ctx.fillRect(x+u*1.4,y-u*4.6+(swing<0?u:0),u*.8,u*2);
+    // 脸
+    ctx.fillStyle='#ffcf9e'; ctx.fillRect(x-u*1.1,y-u*7,u*2.2,u*2);
+    // 帽子
+    ctx.fillStyle='#e63946'; ctx.fillRect(x-u*1.3,y-u*7.4,u*2.6,u*.9);
+    ctx.fillRect(x+u*.3,y-u*8,u*1.2,u*.6);
+    // 眼睛
+    ctx.fillStyle='#1a1030'; ctx.fillRect(x+u*.4,y-u*6.4,Math.max(1,u*.4),u*.4);
+  }
+
+  /* ================= 开始/结束/暂停 ================= */
+  function startGame(){
+    G.totalDist=0; G.coins=0; G.speed=11;
+    G.objs=[]; parts=[];
+    G.spawnCursor=18; G.decoCursor=8;
+    G.player=makePlayer();
+    G.state='playing';
+    document.getElementById('overlay').classList.add('hidden');
+  }
+  function gameOver(){
+    G.state='gameover';
+    var dist=Math.floor(G.totalDist);
+    var isNew=dist>G.high;
+    if(isNew){ G.high=dist; saveNum('pixel_subway_high',dist); }
+    document.getElementById('end-dist').textContent=dist;
+    document.getElementById('end-coins').textContent=G.coins;
+    document.getElementById('end-high').textContent=G.high;
+    document.getElementById('new-record').style.display=isNew?'block':'none';
+    showPanel('over');
+  }
+  function togglePause(){
+    if(G.state==='playing'){ G.state='paused'; showPanel('pause'); }
+    else if(G.state==='paused') resumeGame();
+  }
+  function resumeGame(){
+    G.state='playing';
+    document.getElementById('overlay').classList.add('hidden');
+  }
+  function showPanel(name){
+    document.getElementById('overlay').classList.remove('hidden');
+    document.getElementById('panel-start').style.display=name==='start'?'block':'none';
+    document.getElementById('panel-pause').style.display=name==='pause'?'block':'none';
+    document.getElementById('panel-over').style.display=name==='over'?'block':'none';
+  }
+
+  /* ================= HUD 同步 ================= */
+  function syncHud(){
+    document.getElementById('dist').textContent=Math.floor(G.totalDist)+' m';
+    document.getElementById('coins').textContent='● '+G.coins;
+  }
+
+  /* ================= 键盘 ================= */
+  window.addEventListener('keydown',function(ev){
+    var k=ev.key;
+    if(k==='ArrowLeft'||k==='a'||k==='A'){ if(G.state==='playing') moveLane(-1); ev.preventDefault(); }
+    if(k==='ArrowRight'||k==='d'||k==='D'){ if(G.state==='playing') moveLane(1); ev.preventDefault(); }
+    if(k==='ArrowUp'||k==='w'||k==='W'||k===' '){ if(G.state==='playing') doJump(); ev.preventDefault(); }
+    if(k==='ArrowDown'||k==='s'||k==='S'){ if(G.state==='playing') doSlide(); ev.preventDefault(); }
+    if(k==='p'||k==='P'||k==='Escape'){ if(G.state==='playing'||G.state==='paused') togglePause(); }
+    if(k==='Enter'&&(G.state==='start'||G.state==='gameover')) startGame();
+  });
+
+  /* ================= 触屏滑动手势 ================= */
+  var tsX=0,tsY=0,tsT=0,tracking=false;
+  canvas.addEventListener('touchstart',function(ev){
+    var t=ev.changedTouches[0];
+    tsX=t.clientX; tsY=t.clientY; tsT=Date.now(); tracking=true;
+  },{passive:true});
+  canvas.addEventListener('touchend',function(ev){
+    if(!tracking) return; tracking=false;
+    var t=ev.changedTouches[0];
+    var dx=t.clientX-tsX, dy=t.clientY-tsY;
+    if(G.state!=='playing') return;
+    if(Math.abs(dx)>Math.abs(dy)){
+      if(Math.abs(dx)>28) moveLane(dx>0?1:-1);
+    } else {
+      if(dy<-28) doJump();
+      else if(dy>28) doSlide();
+      else if(Date.now()-tsT<250) doJump();   // 点屏=跳
+    }
+  },{passive:true});
+
+  /* ================= 按钮 ================= */
+  document.getElementById('btn-start').addEventListener('click',startGame);
+  document.getElementById('btn-retry').addEventListener('click',startGame);
+  document.getElementById('btn-resume').addEventListener('click',resumeGame);
+  document.getElementById('btn-restart-p').addEventListener('click',startGame);
+  document.getElementById('btn-pause').addEventListener('click',function(){
+    if(G.state==='playing'||G.state==='paused') togglePause();
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden&&G.state==='playing') togglePause();
+  });
+
+  /* ================= 自适应（像素化缓冲） ================= */
+  function resize(){
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    var CSSW=window.innerWidth, CSSH=window.innerHeight;
+    w=Math.max(60,Math.round(CSSW*dpr/PIX));
+    h=Math.max(60,Math.round(CSSH*dpr/PIX));
+    canvas.width=w; canvas.height=h;
+    canvas.style.width=CSSW+'px'; canvas.style.height=CSSH+'px';
+    ctx.imageSmoothingEnabled=false;
+    // 投影参数
+    cx=w/2; yHor=h*0.34; yPlay=h*0.9;
+    laneNear=w*0.30; laneFar=w*0.022;
+    if(G.clouds.length===0) initClouds();
+  }
+  window.addEventListener('resize',resize);
+  window.addEventListener('orientationchange',function(){ setTimeout(resize,200); });
+
+  /* ================= 主循环 ================= */
+  var last=performance.now();
+  function loop(now){
+    var dt=Math.min((now-last)/1000,.033); last=now;
+    try{
+      if(G.state==='playing'){
+        G.totalDist+=G.speed*dt;
+        G.speed=Math.min(22,G.speed+dt*0.18);   // 逐渐加速
+        updatePlayer(dt); updateObjs(dt); updateParts(dt);
+      }
+    }catch(err){ console.error('更新异常：',err); }
+    try{
+      drawSky(); drawGround(); drawObjs();
+      if(G.state!=='start'&&G.player) drawPlayer();
+      drawParts();
+      syncHud();
+    }catch(err){ console.error('渲染异常：',err); }
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  showPanel('start');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
